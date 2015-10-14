@@ -91,7 +91,7 @@ ud_syn_rel_target(struct ud *u, struct ud_operand *opr)
   case 8 : return (u->pc + opr->lval.sbyte)  & trunc_mask;
   case 16: return (u->pc + opr->lval.sword)  & trunc_mask;
   case 32: return (u->pc + opr->lval.sdword) & trunc_mask;
-  default: UD_ASSERT(!"invalid relative offset size.");
+  default: UD_ASSERT(!"invalid relative offset size."); return 0;  /* added return to silence warning */
   }
 }
 
