@@ -14,7 +14,13 @@
 #include <mach/vm_statistics.h>
 #include <sys/mman.h>
 
+#include <TargetConditionals.h>
+
+#if TARGET_OS_IPHONE
+#include <MobileCoreServices/MobileCoreServices.h>
+#else
 #include <CoreServices/CoreServices.h>
+#endif
 
 /**************************
 *	
