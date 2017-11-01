@@ -408,7 +408,9 @@ allocateBranchIsland(
 		vm_address_t last = 0xfe000000 + PAGE_SIZE;
 #elif defined(__x86_64__)
 		// 64-bit ASLR is in bits 13-28
-		vm_address_t first = ((uint64_t)originalFunctionAddress & ~( (0xFUL << 28) | (PAGE_SIZE - 1) ) ) | (0x1UL << 31);
+	        vm_address_t first = ((uint64_t)originalFunctionAddress & ~( (0xFUL << 28)  ) ) | (0x1UL << 31);
+		//Commented as this is not working on macOS 10.13	
+		//vm_address_t first = ((uint64_t)originalFunctionAddress & ~( (0xFUL << 28) | (PAGE_SIZE - 1) ) ) | (0x1UL << 31);
 		vm_address_t last = (uint64_t)originalFunctionAddress & ~((0x1UL << 32) - 1);
 #endif
 
