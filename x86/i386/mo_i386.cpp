@@ -1,179 +1,9 @@
-// mach_override.c semver:1.2.0
-//   Copyright (c) 2003-2012 Jonathan 'Wolf' Rentzsch: http://rentzsch.com
-//   Some rights reserved: http://opensource.org/licenses/mit
-//   https://github.com/rentzsch/mach_override
-
-#include "mach_override.h"
-#if defined(__i386__) || defined(__x86_64__)
-#include "udis86.h"
-#endif
-
-#include <libkern/OSAtomic.h>
-#include <mach-o/dyld.h>
-#include <mach/mach_init.h>
-#include <mach/vm_map.h>
-#include <mach/vm_statistics.h>
-#include <sys/mman.h>
-
-#include <CoreServices/CoreServices.h>
-
-/**************************
-*
-*	Constants
-*
-**************************/
-#pragma mark	-
-#pragma mark	(Constants)
-
-#if defined(__ppc__) || defined(__POWERPC__)
-
-long kIslandTemplate[] = {
-	0x9001FFFC,	//	stw		r0,-4(SP)
-	0x3C00DEAD,	//	lis		r0,0xDEAD
-	0x6000BEEF,	//	ori		r0,r0,0xBEEF
-	0x7C0903A6,	//	mtctr	r0
-	0x8001FFFC,	//	lwz		r0,-4(SP)
-	0x60000000,	//	nop		; optionally replaced
-	0x4E800420 	//	bctr
-};
-
-#define kAddressHi			3
-#define kAddressLo			5
-#define kInstructionHi		10
-#define kInstructionLo		11
-
-#elif defined(__i386__)
-
-#define kOriginalInstructionsSize 16
-
-char kIslandTemplate[] = {
-	// kOriginalInstructionsSize nop instructions so that we
-	// should have enough space to host original instructions
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-	// Now the real jump instruction
-	0xE9, 0xEF, 0xBE, 0xAD, 0xDE
-};
-
-#define kInstructions	0
-#define kJumpAddress    kInstructions + kOriginalInstructionsSize + 1
-#elif defined(__x86_64__)
-
-#define kOriginalInstructionsSize 32
-
-#define kJumpAddress    kOriginalInstructionsSize + 6
-#define kMaxJumpOffset  (0x7fffffffUL)
-
-char kIslandTemplate[] = {
-	// kOriginalInstructionsSize nop instructions so that we
-	// should have enough space to host original instructions
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-	0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-	// Now the real jump instruction
-	0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00
-};
-
-#endif
-
-#define	kAllocateHigh		1
-#define	kAllocateNormal		0
-
-/**************************
-*
-*	Data Types
-*
-**************************/
-#pragma mark	-
-#pragma mark	(Data Types)
-
-typedef	struct	{
-	char	instructions[sizeof(kIslandTemplate)];
-	int		allocatedHigh;
-}	BranchIsland;
-
-/**************************
-*
-*	Funky Protos
-*
-**************************/
-#pragma mark	-
-#pragma mark	(Funky Protos)
-
-	mach_error_t
-allocateBranchIsland(
-		BranchIsland	**island,
-		int				allocateHigh,
-		void *originalFunctionAddress);
-
-	mach_error_t
-freeBranchIsland(
-		BranchIsland	*island );
-
-#if defined(__ppc__) || defined(__POWERPC__)
-	mach_error_t
-setBranchIslandTarget(
-		BranchIsland	*island,
-		const void		*branchTo,
-		long			instruction );
-#endif
-
-#if defined(__i386__) || defined(__x86_64__)
-mach_error_t
-setBranchIslandTarget_i386(
-						   BranchIsland	*island,
-						   const void		*branchTo,
-						   char*			instructions );
-void
-atomic_mov64(
-		uint64_t *targetAddress,
-		uint64_t value );
-
-	static Boolean
-eatKnownInstructions(
-	unsigned char	*code,
-	uint64_t		*newInstruction,
-	int				*howManyEaten,
-	char			*originalInstructions,
-	int				*originalInstructionCount,
-	uint8_t			*originalInstructionSizes );
-
-	static void
-fixupInstructions(
-    void		*originalFunction,
-    void		*escapeIsland,
-    void		*instructionsToFix,
-	int			instructionCount,
-	uint8_t		*instructionSizes );
-#endif
-
-/*******************************************************************************
-*
-*	Interface
-*
-*******************************************************************************/
-#pragma mark	-
-#pragma mark	(Interface)
-
-#if defined(__i386__) || defined(__x86_64__)
-mach_error_t makeIslandExecutable(void *address) {
-	mach_error_t err = err_none;
-    uintptr_t page = (uintptr_t)address & ~(uintptr_t)(PAGE_SIZE - 1);
-    int e = err_none;
-    e |= mprotect((void *)page, PAGE_SIZE, PROT_EXEC | PROT_READ);
-    e |= msync((void *)page, PAGE_SIZE, MS_INVALIDATE );
-    if (e) {
-        err = err_cannot_override;
-    }
-    return err;
-}
-#endif
+// TODO
+#if defined(__i386__)
+#include "mo_i386.hpp"
 
     mach_error_t
-mach_override_ptr(
+MO_i386::mach_override_ptr(
 	void *originalFunctionAddress,
     const void *overrideFunctionAddress,
     void **originalFunctionReentryIsland )
@@ -371,14 +201,6 @@ mach_override_ptr(
 }
 
 /*******************************************************************************
-*
-*	Implementation
-*
-*******************************************************************************/
-#pragma mark	-
-#pragma mark	(Implementation)
-
-/*******************************************************************************
 	Implementation: Allocates memory for a branch island.
 
 	@param	island			<-	The allocated island.
@@ -390,7 +212,7 @@ mach_override_ptr(
 	***************************************************************************/
 
 	mach_error_t
-allocateBranchIsland(
+MO_i386::allocateBranchIsland(
 		BranchIsland	**island,
 		int				allocateHigh,
 		void *originalFunctionAddress)
@@ -471,6 +293,7 @@ allocateBranchIsland(
 	return err;
 }
 
+
 /*******************************************************************************
 	Implementation: Deallocates memory for a branch island.
 
@@ -479,8 +302,8 @@ allocateBranchIsland(
 
 	***************************************************************************/
 
-	mach_error_t
-freeBranchIsland(
+mach_error_t
+MO_amd64::freeBranchIsland(
 		BranchIsland	*island )
 {
 	assert( island );
@@ -588,102 +411,6 @@ setBranchIslandTarget_i386(
 #endif
 
 
-#if defined(__i386__) || defined(__x86_64__)
-	static Boolean
-eatKnownInstructions(
-	unsigned char	*code,
-	uint64_t		*newInstruction,
-	int				*howManyEaten,
-	char			*originalInstructions,
-	int				*originalInstructionCount,
-	uint8_t			*originalInstructionSizes )
-{
-	Boolean allInstructionsKnown = true;
-	int totalEaten = 0;
-	int remainsToEat = 5; // a JMP instruction takes 5 bytes
-	int instructionIndex = 0;
-	ud_t ud_obj;
-
-	if (howManyEaten) *howManyEaten = 0;
-	if (originalInstructionCount) *originalInstructionCount = 0;
-	ud_init(&ud_obj);
-#if defined(__i386__)
-	ud_set_mode(&ud_obj, 32);
-#else
-	ud_set_mode(&ud_obj, 64);
-#endif
-	ud_set_input_buffer(&ud_obj, code, 64); // Assume that 'code' points to at least 64bytes of data.
-	while (remainsToEat > 0) {
-		if (!ud_disassemble(&ud_obj)) {
-		    allInstructionsKnown = false;
-		    fprintf(stderr, "mach_override: some instructions unknown! Need to update libudis86\n");
-		    break;
-		}
-
-		// At this point, we've matched curInstr
-		int eaten = ud_insn_len(&ud_obj);
-		remainsToEat -= eaten;
-		totalEaten += eaten;
-
-		if (originalInstructionSizes) originalInstructionSizes[instructionIndex] = eaten;
-		instructionIndex += 1;
-		if (originalInstructionCount) *originalInstructionCount = instructionIndex;
-	}
-
-
-	if (howManyEaten) *howManyEaten = totalEaten;
-
-	if (originalInstructions) {
-		Boolean enoughSpaceForOriginalInstructions = (totalEaten < kOriginalInstructionsSize);
-
-		if (enoughSpaceForOriginalInstructions) {
-			memset(originalInstructions, 0x90 /* NOP */, kOriginalInstructionsSize); // fill instructions with NOP
-			bcopy(code, originalInstructions, totalEaten);
-		} else {
-			// printf ("Not enough space in island to store original instructions. Adapt the island definition and kOriginalInstructionsSize\n");
-			return false;
-		}
-	}
-
-	if (allInstructionsKnown) {
-		// save last 3 bytes of first 64bits of codre we'll replace
-		uint64_t currentFirst64BitsOfCode = *((uint64_t *)code);
-		currentFirst64BitsOfCode = OSSwapInt64(currentFirst64BitsOfCode); // back to memory representation
-		currentFirst64BitsOfCode &= 0x0000000000FFFFFFLL;
-
-		// keep only last 3 instructions bytes, first 5 will be replaced by JMP instr
-		*newInstruction &= 0xFFFFFFFFFF000000LL; // clear last 3 bytes
-		*newInstruction |= (currentFirst64BitsOfCode & 0x0000000000FFFFFFLL); // set last 3 bytes
-	}
-
-	return allInstructionsKnown;
-}
-
-	static void
-fixupInstructions(
-    void		*originalFunction,
-    void		*escapeIsland,
-    void		*instructionsToFix,
-	int			instructionCount,
-	uint8_t		*instructionSizes )
-{
-	int	index;
-	for (index = 0;index < instructionCount;index += 1)
-	{
-		if (*(uint8_t*)instructionsToFix == 0xE9) // 32-bit jump relative
-		{
-			uint32_t offset = (uintptr_t)originalFunction - (uintptr_t)escapeIsland;
-			uint32_t *jumpOffsetPtr = (uint32_t*)((uintptr_t)instructionsToFix + 1);
-			*jumpOffsetPtr += offset;
-		}
-
-		originalFunction = (void*)((uintptr_t)originalFunction + instructionSizes[index]);
-		escapeIsland = (void*)((uintptr_t)escapeIsland + instructionSizes[index]);
-		instructionsToFix = (void*)((uintptr_t)instructionsToFix + instructionSizes[index]);
-    }
-}
-
-#if defined(__i386__)
 __asm(
 			".text;"
 			".align 2, 0x90;"
@@ -718,12 +445,5 @@ __asm(
 			"	popl %ebp;"
 			"	ret"
 );
-#elif defined(__x86_64__)
-void atomic_mov64(
-		uint64_t *targetAddress,
-		uint64_t value )
-{
-    *targetAddress = value;
-}
-#endif
+
 #endif
