@@ -38,11 +38,22 @@ Please base your work off the unstable branch. After making your changes please 
 	<tr>
 		<td>clang</td> <td>x86_64</td>
 	</tr>
+	<tr>
+		<td>clang</td> <td>arm64 <b>(WIP)</b></td>
+	</tr>
 </table>
 
 Obviously ppc can only be tested on ppc Macs or on 10.5 and 10.6 (Rosetta-supporting) Intel Macs.
 
 ## Version History
+
+### mach_override 1.3-alpha: June 26 2022
+
+* [NEW] arm_64 support (WIP: crashes all the time --> need help).
+
+* [CHANGE] new C++ code architecture for better readability.
+
+* Should still work on M1/M2 macs with Rosetta 2.
 
 ### mach_override 1.2: Aug 9 2012
 
