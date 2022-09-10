@@ -31,8 +31,9 @@ __END_DECLS
 		static kern_return_t override(void *originalFunctionPtr) {												\
 			kern_return_t result = err_none;																	\
 			if (!ORIGINAL_FUNCTION_NAME##_overriden) {															\
+                std::cout << "Will override and store result at address " << &result << std::endl;              \
 				ORIGINAL_FUNCTION_NAME##_overriden = true;														\
-				result = MO::get()->mach_override_ptr( (void*)originalFunctionPtr,											\
+                result = MO::get()->mach_override_ptr( (void*)originalFunctionPtr,						        \
 											(void*)mach_override_class__##ORIGINAL_FUNCTION_NAME::replacement,	\
 											(void**)&ORIGINAL_FUNCTION_NAME##_reenter );						\
 			}																									\
