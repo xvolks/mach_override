@@ -7,8 +7,8 @@
 
 
 #define NOP 0xd503201f
-#define LDR_X28_PC_PLUS_8 0x5800005c
-#define BR_X28 0xd61f0380
+#define LDR_X18_PC_PLUS_8 0x58000052
+#define BR_X18 0xd61f0240
 #define BADCOFFE 0xBADC0FFE
 #define DEADBEEF 0xDEADBEEF
 
@@ -17,20 +17,8 @@ ISLAND kIslandTemplate[] = {
 	NOP,  // nop
 	NOP,  // nop
 	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-	NOP,  // nop
-  	LDR_X28_PC_PLUS_8,  // ldr x10, [pc + 8] #  ldr x10, =0xDEADBEEF_BADC0FFEE
-	BR_X28,  // br x10
+  	LDR_X18_PC_PLUS_8,  // ldr x18, [pc + 8] #  ldr x10, =0xDEADBEEF_BADC0FFEE
+	BR_X18,  // br x18
 	BADCOFFE,  // BADC0FFE
 	DEADBEEF,  // DEADBEEF
 };
@@ -38,7 +26,7 @@ ISLAND kIslandTemplate[] = {
 //	0x1F2003D5, //  nop
 
 // Jump over 16 nops and ldr + br x10
-uint64_t kJumpAddress=			(16 * 4 + 4 * 2);
+uint64_t kJumpAddress=			(4 * 4 + 4 * 2);
 #define kOriginalInstructionsSize 16
 //#define kAddressLo			(16 * 8 + 8 * 2)
 //#define kAddressHi			(kAddressLo + 8)
@@ -99,6 +87,14 @@ fixupInstructions(
     }
 }
 
+int blu() {
+    int v=3;
+    int w = 42-v;
+    std::cout << "Adding " << std::dec << v << " + " << w << std::endl;
+    return v+w;
+}
+
+
 mach_error_t
 MO_arm64::mach_override_ptr(
 	void *originalFunctionAddress,
@@ -145,10 +141,13 @@ MO_arm64::mach_override_ptr(
 	//	Build the branch absolute instruction to the escape island.
 	ISLAND	branchAbsoluteInstruction[4]; // Set to 0 just to silence warning.
 	if( !err ) {
-        branchAbsoluteInstruction[0] = LDR_X28_PC_PLUS_8;
-        branchAbsoluteInstruction[1] = BR_X28;
-        branchAbsoluteInstruction[2] = (ISLAND)((uint64_t)escapeIsland & 0xFFFFFFFFUL);
-        branchAbsoluteInstruction[3] = (ISLAND)((uint64_t)escapeIsland >> 32 & 0xFFFFFFFFUL);
+        branchAbsoluteInstruction[0] = LDR_X18_PC_PLUS_8;
+        branchAbsoluteInstruction[1] = BR_X18;
+        
+        branchAbsoluteInstruction[2] = (ISLAND)((uint64_t)blu & 0xFFFFFFFFUL);
+        branchAbsoluteInstruction[3] = (ISLAND)((uint64_t)blu >> 32 & 0xFFFFFFFFUL);
+//        branchAbsoluteInstruction[2] = (ISLAND)((uint64_t)escapeIsland & 0xFFFFFFFFUL);
+//        branchAbsoluteInstruction[3] = (ISLAND)((uint64_t)escapeIsland >> 32 & 0xFFFFFFFFUL);
 
 
 //		long escapeIslandAddress = ((long) escapeIsland) & 0x3FFFFFF;
@@ -160,16 +159,13 @@ MO_arm64::mach_override_ptr(
 	//  the escape island has to the original function, except the escape island is
 	//  technically our original function.
 	BranchIsland	*reentryIsland = nullptr;
-	if( !err && originalFunctionReentryIsland ) {
-		err = allocateBranchIsland(0, &reentryIsland, kAllocateHigh, escapeIsland);
-		if( !err ) {
-            //	Make the original function implementation writable.
-//            err = rw_mem(originalFunctionPtr, err);
-            if ( !err )
-                *originalFunctionReentryIsland = reentryIsland;
-//            err = rx_mem(originalFunctionPtr, err);
-        }
-	}
+//	if( !err && originalFunctionReentryIsland ) {
+//		err = allocateBranchIsland(0, &reentryIsland, kAllocateHigh, escapeIsland);
+//		if( !err ) {
+//            if ( !err )
+//                *originalFunctionReentryIsland = reentryIsland;
+//        }
+//	}
 
 	//	Atomically:
 	//	o If the reentry island was allocated:
@@ -186,8 +182,9 @@ MO_arm64::mach_override_ptr(
 						(void*) (originalFunctionPtr + eatenBytes), originalFunctionPtr );
             if( !err )
                 err = makeIslandExecutable(escapeIsland);
-            if( !err )
-                err = makeIslandExecutable(reentryIsland);
+
+//            if( !err )
+//                err = makeIslandExecutable(reentryIsland);
 			if( !err ) {
 //                std::cout << "8 aligned " << (uint64_t) originalFunctionPtr % 8 << std::endl;
                 err = rw_mem(originalFunctionPtr, err);
@@ -209,6 +206,7 @@ MO_arm64::mach_override_ptr(
 			freeBranchIsland( escapeIsland );
 	}
 
+    std::cout << "Will return with result " << err << std::endl;
 	return err;
 }
 
@@ -222,17 +220,20 @@ bool MO_arm64::swap(ISLAND* address, ISLAND newValue, ISLAND oldValue) {
 
 mach_error_t MO_arm64::rw_mem(const ISLAND *originalFunctionPtr, mach_error_t err) {
     if( !err ) {
-        std::cout << "rw_mem: " << std::hex << originalFunctionPtr << std::endl;
+        std::cout << "rw_mem, address: " << std::hex << originalFunctionPtr << std::endl;
+        uintptr_t page = (uintptr_t)originalFunctionPtr & ~(uintptr_t)(PAGE_SIZE - 1);
+        std::cout << "rw_mem, PAGE_SIZE: " << PAGE_SIZE<< ", page: " << std::hex << page << std::endl;
+        // TODO check if we are across a page boundary
         err = mach_vm_protect( mach_task_self(),
-                (vm_address_t) originalFunctionPtr,
-                kOriginalInstructionsSize,
+                (vm_address_t) page,
+                PAGE_SIZE,
                 false,
-                VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+                VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY );
     }
     if (err) {
         fprintf(stderr, "vm_protect err = %x %s:%d\n", err, __FILE__, __LINE__);
     } else {
-//        auto merr = msync((void *)originalFunctionPtr, kOriginalInstructionsSize, MS_INVALIDATE | MS_SYNC);
+//        auto merr = msync((void *)originalFunctionPtr, PAGE_SIZE, MS_INVALIDATE | MS_SYNC);
 //        if (merr) {
 //            fprintf(stderr, "msync err = %x %s:%d\n", err, __FILE__, __LINE__);
 //        }
@@ -243,10 +244,13 @@ mach_error_t MO_arm64::rw_mem(const ISLAND *originalFunctionPtr, mach_error_t er
 
 mach_error_t MO_arm64::rx_mem(const ISLAND *originalFunctionPtr, mach_error_t err) {
     if( !err ) {
-//        std::cout << "rx_mem: " << std::hex << originalFunctionPtr << std::endl;
+        std::cout << "rx_mem: " << std::hex << originalFunctionPtr << std::endl;
+        uintptr_t page = (uintptr_t)originalFunctionPtr & ~(uintptr_t)(PAGE_SIZE - 1);
+        std::cout << "rx_mem, PAGE_SIZE: " << PAGE_SIZE<< ", page: " << std::hex << page << std::endl;
+        // TODO check if we are across a page boundary
         err = mach_vm_protect( mach_task_self(),
-                (vm_address_t) originalFunctionPtr,
-                kOriginalInstructionsSize,
+                (vm_address_t) page,
+                PAGE_SIZE,
                 true,
                 VM_PROT_READ | VM_PROT_EXECUTE);
     }

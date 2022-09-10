@@ -126,11 +126,14 @@ vm_address_t test_vm_allocate_anywhere() {
     }
 }
 
-void rw_mem(vm_address_t originalFunctionPtr, mach_error_t& err)  {
+void rw_mem(vm_address_t address, mach_error_t& err)  {
     if( !err ) {
-        std::cout << "rw_mem: " << std::hex << originalFunctionPtr << std::endl;
-        err = vm_protect( mach_task_self(),
-                          originalFunctionPtr, 8, false, VM_PROT_DEFAULT);
+        std::cout << "rw_mem: " << std::hex << address << std::endl;
+        uintptr_t page = (uintptr_t)address & ~(uintptr_t)(PAGE_SIZE - 1);
+        std::cout << "rw_mem: " << std::hex << page << std::endl;
+
+        err = vm_protect(mach_task_self(),
+                         page, PAGE_SIZE, false, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
     }
     if (err) fprintf(stdout, "err = %x %s:%d\n", err, __FILE__, __LINE__);
 }
@@ -174,6 +177,20 @@ void test_vm_protect(vm_address_t address) {
     assert(a == 42);
 }
 
+void test_overwrite_function() {
+    NaiveTrace t("test_overwrite_function()");
+    auto err = err_none;
+    auto address = base_function;
+    test_vm_protect(reinterpret_cast<vm_address_t>(address));
+}
+
+int bla() {
+    int v=3;
+    int w = 42-v;
+    std::cout << "Adding " << std::dec << v << " + " << w << std::endl;
+    return v+w;
+}
+
 
 
 
@@ -181,30 +198,32 @@ void test_vm_protect(vm_address_t address) {
 #pragma mark main
 
 int main( int argc, const char *argv[] ) {
-//    vm_address_t address = test_vm_allocate_anywhere();
-//    if (address) {
-//        test_vm_protect(address);
-//        mach_error_t err = vm_deallocate( mach_task_self(), address, PAGE_SIZE);
-//        if (err == err_none) {
-//            std::cout << "test_vm_deallocate: success" << std::endl;
-//        } else {
-//            std::cout << "test_vm_deallocate: failed code " << err << std::endl;
-//        }
-//
-//    }
-//
+    auto v = base_function();
+    std::cout << "The answer is = " << std::dec << v << std::endl;
+
+    vm_address_t address = test_vm_allocate_anywhere();
+    if (address) {
+        test_vm_protect(address);
+        mach_error_t err = vm_deallocate( mach_task_self(), address, PAGE_SIZE);
+        if (err == err_none) {
+            std::cout << "test_vm_deallocate: success" << std::endl;
+        } else {
+            std::cout << "test_vm_deallocate: failed code " << err << std::endl;
+        }
+
+    }
+
+    test_overwrite_function();
+
 
     auto answer = base_function();
     std::cout << "The answer is = " << std::dec << answer << std::endl;
-
+    
     kern_return_t err;
     MACH_OVERRIDE(int, base_function, (), err) {
-//        int v = base_function_reenter();
-        int v=3;
-        int w = 42-v;
-        std::cout << "Adding " << std::dec << v << " + " << w << std::endl;
-        return v+w;
-    } END_MACH_OVERRIDE(base_function);
+        return 2;
+    }
+    END_MACH_OVERRIDE(base_function);
 
     auto result = base_function();
     std::cout << "The answer is = " << std::dec << result << std::endl;
